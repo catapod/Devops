@@ -1,0 +1,143 @@
+---
+- name: Install packages
+  apt:
+    update_cache=yes
+    name={{ item }}
+    state=present
+  with_items:
+    - git
+    - nano
+    - postgresql
+    - curl
+    - libpq-dev
+    - nodejs
+    - nginx-full
+
+- name: Fix postgresql permissions
+  lineinfile:
+    dest=/etc/postgresql/9.4/main/pg_hba.conf
+    regexp='^local\s+all\s+postgres\s+.*'
+    line='local   all             postgres                                trust'
+    state=present
+  register: fix
+
+- name: Restart postgresql
+  service:
+    name=postgresql
+    state=restarted
+  when: fix.changed
+
+- name: Add user "{{ SYS_USER }}"
+  user:
+    name={{ SYS_USER }}
+    shell=/bin/bash
+    comment="app user"
+    state=present
+
+- name: Add user "{{ SYS_USER }}" to sudoers
+  lineinfile:
+    dest=/etc/sudoers
+    insertafter='^%sudo'
+    line='%{{ SYS_USER }} ALL=(ALL:ALL) NOPASSWD:ALL'
+    state=present
+
+- name: Install key for rvm
+  shell: gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Install rvm
+  shell: \curl -sSL https://get.rvm.io | bash -s stable
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Install ruby
+  shell: source /home/{{ SYS_USER }}/.profile && rvm install 2.2 && rvm alias create default 2.2
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Install bundle
+  shell: source /home/{{ SYS_USER }}/.profile && gem install bundle
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Install passenger
+  shell: source /home/{{ SYS_USER }}/.profile && gem install passenger
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Creates BE directory
+  file:
+    path=/srv/{{ DATE }}_BE
+    state=directory
+    owner={{ SYS_USER }}
+    group={{ SYS_USER }}
+
+- name: Clone BE
+  git:
+    repo=https://github.com/kursomir/BE.git
+    dest=/srv/{{ DATE }}_BE/.
+    version=develop
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Bundle install
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE }}_BE && bundle install
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Create DB
+  shell: psql -U postgres -c "CREATE DATABASE {{ D_DB_NAME }};" && psql -U postgres -c "CREATE USER {{ D_DB_USER }} WITH password '{{ D_DB_PASS }}';" && psql -U postgres -c "GRANT ALL privileges ON DATABASE {{ D_DB_NAME }} TO {{ D_DB_USER }};"
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Create application.yml
+  template:
+    src=application.yml.j2
+    dest=/srv/{{ DATE }}_BE/config/application.yml
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Bundle db:migrate
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE }}_BE && bundle exec rake db:migrate
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Rake assets:clobber
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE }}_BE && RAILS_ENV={{ R_ENV }} rake assets:clobber
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Rake assets:precompile
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE }}_BE && RAILS_ENV={{ R_ENV }} rake assets:precompile
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Start BE
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE }}_BE && passenger start -p {{ R_PORT }} -e {{ R_ENV }} -d
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+

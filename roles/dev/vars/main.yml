@@ -1,0 +1,13 @@
+---
+DATE: "{{ lookup('pipe', 'date +%Y_%m_%d') }}"
+
+SYS_USER: user
+
+R_ENV: env
+R_PORT: 4000
+
+D_DB_NAME: db
+D_DB_USER: user
+D_DB_PASS: password
+D_DB_HOST: localhost
+
