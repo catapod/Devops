@@ -1,0 +1,117 @@
+---
+- name: Current time
+  become: no
+  local_action: shell date +%Y_%m_%d_%H_%M
+  register: DATE
+  run_once: true
+
+- name: Get current commit
+  shell: cd /srv/BE_current && git rev-parse HEAD
+  register: GCC
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Creates BE directory
+  file:
+    path=/srv/{{ DATE.stdout }}_BE
+    state=directory
+    owner={{ SYS_USER }}
+    group={{ SYS_USER }}
+
+- name: Clone BE
+  git:
+    repo={{ BE_REPO }}.git
+    dest=/srv/{{ DATE.stdout }}_BE/.
+    version={{ BRANCH }}
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Bundle install
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE.stdout }}_BE && bundle install
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Create application.yml
+  template:
+    src=application.yml.j2
+    dest=/srv/{{ DATE.stdout }}_BE/config/application.yml
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Check db exist
+  shell: psql -U postgres -lqt | grep -w {{ D_DB_NAME }} | awk '{print $1}'
+  register: checkdb
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Create DB
+  shell: psql -U postgres -c "CREATE DATABASE {{ D_DB_NAME }};" && psql -U postgres -c "CREATE USER {{ D_DB_USER }} WITH password '{{ D_DB_PASS }}';" && psql -U postgres -c "GRANT ALL privileges ON DATABASE {{ D_DB_NAME }} TO {{ D_DB_USER }};"
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+  when: checkdb.stdout != '{{ D_DB_NAME }}'
+
+- name: Bundle db:migrate
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE.stdout }}_BE && bundle exec rake db:migrate
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Rake assets:clobber
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE.stdout }}_BE && RAILS_ENV={{ R_ENV }} rake assets:clobber
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Rake assets:precompile
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE.stdout }}_BE && RAILS_ENV={{ R_ENV }} rake assets:precompile
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Stop BE
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/BE_current && passenger stop -p {{ R_PORT }}
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+  ignore_errors: True
+
+- name: Change symlink
+  file:
+    src=/srv/{{ DATE.stdout }}_BE
+    dest=/srv/BE_current
+    state=link
+    force=yes
+
+- name: Start BE
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/BE_current && passenger start -p {{ R_PORT }} -e {{ R_ENV }} -d
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Get new commit
+  shell: cd /srv/BE_current && git rev-parse HEAD
+  register: GNC
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Send notification message via Slack all options
+  become: no
+  slack:
+    token: "{{ SLACK_TOKEN }}"
+    msg: "Deploy new version BE completed\nGit diff: {{ BE_REPO }}/compare/{{ GCC.stdout }}...{{ GNC.stdout }}"
+

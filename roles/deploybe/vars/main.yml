@@ -1,0 +1,18 @@
+---
+SLACK_TOKEN: XXX/YYY/ZZZ
+
+BE_REPO: https://github.com/kursomir/BE
+BRANCH: develop
+
+R_ENV: env
+R_PORT: 4000
+
+VK_TOKEN: vktoken
+VK_GROUP: vkgroupid
+VK_OWNER: vkownerid
+
+D_DB_NAME: db
+D_DB_USER: user
+D_DB_PASS: password
+D_DB_HOST: localhost
+

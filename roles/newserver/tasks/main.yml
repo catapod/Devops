@@ -1,0 +1,78 @@
+---
+- name: Install packages
+  apt:
+    update_cache=yes
+    name={{ item }}
+    state=present
+  with_items:
+    - git
+    - nano
+    - postgresql
+    - curl
+    - libpq-dev
+    - nodejs
+    - nginx-full
+
+- name: Fix postgresql permissions
+  lineinfile:
+    dest=/etc/postgresql/9.4/main/pg_hba.conf
+    regexp='^local\s+all\s+postgres\s+.*'
+    line='local   all             postgres                                trust'
+    state=present
+  register: fix
+
+- name: Restart postgresql
+  service:
+    name=postgresql
+    state=restarted
+  when: fix.changed
+
+- name: Add user "{{ SYS_USER }}"
+  user:
+    name={{ SYS_USER }}
+    shell=/bin/bash
+    comment="app user"
+    state=present
+
+- name: Add user "{{ SYS_USER }}" to sudoers
+  lineinfile:
+    dest=/etc/sudoers
+    insertafter='^%sudo'
+    line='%{{ SYS_USER }} ALL=(ALL:ALL) NOPASSWD:ALL'
+    state=present
+
+- name: Install key for rvm
+  shell: gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Install rvm
+  shell: \curl -sSL https://get.rvm.io | bash -s stable
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Install ruby
+  shell: source /home/{{ SYS_USER }}/.profile && rvm install 2.2 && rvm alias create default 2.2
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Install bundle
+  shell: source /home/{{ SYS_USER }}/.profile && gem install bundle
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
+- name: Install passenger
+  shell: source /home/{{ SYS_USER }}/.profile && gem install passenger
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
