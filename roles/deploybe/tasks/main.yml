@@ -114,4 +114,4 @@
   slack:
     token: "{{ SLACK_TOKEN }}"
     msg: "Deploy new version BE completed\nGit diff: {{ BE_REPO }}/compare/{{ GCC.stdout }}...{{ GNC.stdout }}"
-
+  ignore_errors: True
