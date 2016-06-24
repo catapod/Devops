@@ -50,13 +50,36 @@
   become: yes
   become_user: "{{ SYS_USER }}"
 
+- name: Check db user exist
+  shell: psql -U postgres -tAc "SELECT rolname FROM pg_roles WHERE rolname='{{ D_DB_USER }}'"
+  register: checkuser
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
 - name: Create DB
-  shell: psql -U postgres -c "CREATE DATABASE {{ D_DB_NAME }};" && psql -U postgres -c "CREATE USER {{ D_DB_USER }} WITH password '{{ D_DB_PASS }}';" && psql -U postgres -c "GRANT ALL privileges ON DATABASE {{ D_DB_NAME }} TO {{ D_DB_USER }};"
+  shell: psql -U postgres -c "CREATE DATABASE {{ D_DB_NAME }};"
   args:
     executable: /bin/bash
   become: yes
   become_user: "{{ SYS_USER }}"
   when: checkdb.stdout != '{{ D_DB_NAME }}'
+
+- name: Create user
+  shell: psql -U postgres -c "CREATE USER {{ D_DB_USER }} WITH password '{{ D_DB_PASS }}';"
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+  when: checkuser.stdout != '{{ D_DB_USER }}'
+
+- name: Grant privileges
+  shell: psql -U postgres -c "GRANT ALL privileges ON DATABASE {{ D_DB_NAME }} TO {{ D_DB_USER }};"
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
 
 - name: Bundle db:migrate
   shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE.stdout }}_BE && bundle exec rake db:migrate
