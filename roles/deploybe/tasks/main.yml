@@ -81,8 +81,8 @@
   become: yes
   become_user: "{{ SYS_USER }}"
 
-- name: Bundle db:migrate
-  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE.stdout }}_BE && bundle exec rake db:migrate
+- name: Bundle db:reset
+  shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE.stdout }}_BE && bundle exec rake db:reset
   args:
     executable: /bin/bash
   become: yes
