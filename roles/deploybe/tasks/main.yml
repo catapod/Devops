@@ -74,6 +74,13 @@
   become_user: "{{ SYS_USER }}"
   when: checkuser.stdout != '{{ D_DB_USER }}'
 
+- name: Granting user permission to create DB
+  shell: psql -U postgres -c "ALTER USER {{ D_DB_USER }} CREATEDB;"
+  args:
+    executable: /bin/bash
+  become: yes
+  become_user: "{{ SYS_USER }}"
+
 - name: Change DB owner
   shell: psql -U postgres -c "ALTER DATABASE {{ D_DB_NAME }} OWNER TO {{ D_DB_USER }};"
   args:
@@ -87,6 +94,13 @@
     executable: /bin/bash
   become: yes
   become_user: "{{ SYS_USER }}"
+
+- name: Add symlink for seed_files
+  file:
+    src=/srv/seed_files
+    dest=/srv/{{ DATE.stdout }}_BE/db/seed_files
+    state=link
+    force=yes
 
 - name: Bundle db:reset
   shell: source /home/{{ SYS_USER }}/.profile && cd /srv/{{ DATE.stdout }}_BE && bundle exec rake db:reset
@@ -121,13 +135,6 @@
   file:
     src=/srv/{{ DATE.stdout }}_BE
     dest=/srv/BE_current
-    state=link
-    force=yes
-
-- name: Add symlink for seed_files
-  file:
-    src=/srv/seed_files
-    dest=/srv/BE_current/db/seed_files
     state=link
     force=yes
 
